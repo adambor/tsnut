@@ -1,0 +1,4 @@
+
+interface IHexSerializable {
+    toHex(): string;
+}
