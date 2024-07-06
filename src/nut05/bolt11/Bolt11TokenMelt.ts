@@ -10,8 +10,6 @@ import {ILockableObjectStorage} from "../../interfaces/storage/ILockableObjectSt
 import {IUnitConverter} from "../../interfaces/units/IUnitConverter";
 import {NutError, NutErrorType} from "../../nut00/types/NutError";
 import {SavedTokenMeltState} from "../persistent/SavedTokenMelt";
-import {SavedBolt11TokenMint} from "../../nut04/bolt11/persistent/SavedBolt11TokenMint";
-
 
 export class Bolt11TokenMelt extends TokenMelt<
     SavedBolt11TokenMelt,
@@ -30,9 +28,9 @@ export class Bolt11TokenMelt extends TokenMelt<
         lightningBackend: ILightningBackend,
         quoteExpirySeconds: number,
         unitConverter: IUnitConverter,
-        allowedUnits?: Set<string>
+        unitLimits?: {[unit: string]: {min: number, max: number}}
     ) {
-        super(keysets, secretStorage, meltStorage, quoteExpirySeconds, unitConverter, allowedUnits);
+        super(keysets, secretStorage, meltStorage, quoteExpirySeconds, unitConverter, unitLimits);
         this.lightningBackend = lightningBackend;
     }
 
@@ -45,7 +43,7 @@ export class Bolt11TokenMelt extends TokenMelt<
     }
 
     async getQuote(quote: string): Promise<MeltQuoteBolt11Response> {
-        const savedMelt = await this.meltStorage.get(quote);
+        const savedMelt = await this.storage.get(quote);
         if(savedMelt==null) throw new NutError(NutErrorType.QUOTE_NOT_FOUND, "Quote not found");
 
         return {
@@ -73,7 +71,7 @@ export class Bolt11TokenMelt extends TokenMelt<
             request.unit,
             Math.min(quoteExpiry, parsedInvoice.expiry)
         );
-        await this.meltStorage.save(savedMelt);
+        await this.storage.save(savedMelt);
 
         return {
             quote: savedMelt.getId(),
@@ -85,7 +83,9 @@ export class Bolt11TokenMelt extends TokenMelt<
     }
 
     protected async pay(savedMeltResp: { obj: SavedBolt11TokenMelt; lockId: string }): Promise<void> {
-        await this.lightningBackend.payInvoice(savedMeltResp.obj.pr);
+        const parsedInvoice = this.lightningBackend.parseInvoice(savedMeltResp.obj.pr);
+        const paymentStatus = await this.lightningBackend.getPaymentStatus(parsedInvoice.id);
+        if(paymentStatus==null) await this.lightningBackend.payInvoice(savedMeltResp.obj.pr);
     }
 
     protected async waitForPayment(savedMelt: SavedBolt11TokenMelt): Promise<MeltBolt11Response> {
@@ -103,6 +103,23 @@ export class Bolt11TokenMelt extends TokenMelt<
                 payment_preimage: preimage
             };
         }
+    }
+
+    getSupportedNuts(): { "5": any } {
+        return {
+            "5": {
+                methods: Object.keys(this.unitLimits).map(unit => {
+                    const limits = this.unitLimits[unit];
+                    return {
+                        method: "bolt11",
+                        unit,
+                        min_amount: limits.min,
+                        max_amount: limits.max
+                    }
+                }),
+                disabled: this.allowedUnits.size===0
+            }
+        };
     }
 
 }

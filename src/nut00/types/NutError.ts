@@ -13,7 +13,8 @@ export const NutErrorType = {
     QUOTE_ALREADY_CLAIMING: 8,
 
     QUOTE_ADDING_INPUTS: 9,
-    QUOTE_INPUTS_SET: 10
+    QUOTE_INPUTS_SET: 10,
+    QUOTE_EXPIRED: 11,
 };
 
 export class NutError extends Error {

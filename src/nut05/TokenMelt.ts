@@ -2,13 +2,10 @@ import {MeltQuoteRequest} from "./types/MeltQuoteRequest";
 import {MeltQuoteResponse} from "./types/MeltQuoteResponse";
 import {MeltRequest} from "./types/MeltRequest";
 import {MeltResponse} from "./types/MeltResponse";
-import {ITokenService} from "../interfaces/ITokenService";
-import {ILockableObjectStorage} from "../interfaces/storage/ILockableObjectStorage";
-import {IUnitConverter} from "../interfaces/units/IUnitConverter";
-import {Keyset} from "../nut02/Keyset";
 import {NutError, NutErrorType} from "../nut00/types/NutError";
 import {SavedTokenMelt, SavedTokenMeltState} from "./persistent/SavedTokenMelt";
 import {Proof} from "../nut00/types/Proof";
+import {IMintMeltTokenService} from "../interfaces/IMintMeltTokenService";
 
 
 export abstract class TokenMelt<
@@ -17,30 +14,25 @@ export abstract class TokenMelt<
     ResQuote extends MeltQuoteResponse,
     Req extends MeltRequest,
     Res extends MeltResponse
-> extends ITokenService {
+> extends IMintMeltTokenService<T> {
 
-    meltStorage: ILockableObjectStorage<T>;
-    unitConverter: IUnitConverter;
-    allowedUnits: Set<string>;
-    quoteExpirySeconds: number;
-
-    constructor(
-        keysets: Keyset<any, any>[],
-        secretStorage: ISecretStorage,
-        meltStorage: ILockableObjectStorage<T>,
-        quoteExpirySeconds: number,
-        unitConverter: IUnitConverter,
-        allowedUnits?: Set<string>
-    ) {
-        super(keysets, secretStorage);
-        this.meltStorage = meltStorage;
-        this.quoteExpirySeconds = quoteExpirySeconds;
-        this.unitConverter = unitConverter;
-        if(allowedUnits==null) {
-            this.allowedUnits = new Set();
-            keysets.forEach(keyset => this.allowedUnits.add(keyset.unit));
-        } else {
-            this.allowedUnits = allowedUnits;
+    async start(): Promise<void> {
+        const savedMelts = await this.storage.getAll();
+        for(let savedMelt of savedMelts) {
+            const actionId = savedMelt.getId();
+            if(savedMelt.getState()===SavedTokenMeltState.LOCKING_INPUTS) {
+                //Some inputs might already be marked as locked, try to unlock them all
+                await this.secretStorage.unlockTryBatch(savedMelt.inputs, actionId);
+            }
+            if(savedMelt.getState()===SavedTokenMeltState.INPUTS_LOCKED) {
+                //Payment might've already been attempted, let's just keep rolling here
+                const savedMeltResp = await this.storage.getAndLock(actionId, 60);
+                await this.intiatePayment(savedMeltResp);
+            }
+            if(savedMelt.getState()===SavedTokenMeltState.PAYING) {
+                //Subscribe to payment result
+                this.subscribeToPaymentAndFinish(savedMelt);
+            }
         }
     }
 
@@ -67,6 +59,7 @@ export abstract class TokenMelt<
 
     /**
      * Initiates a payment corresponding to a melt request, this function should not block till the tx is confirmed
+     * This function should also check if the payment was sent already, and in that case do nothing (not throw an error)
      * @param savedMeltResp
      * @protected
      */
@@ -80,6 +73,39 @@ export abstract class TokenMelt<
      */
     protected abstract waitForPayment(savedMelt: T): Promise<Res>;
 
+    private async intiatePayment(savedMeltResp: {obj: T, lockId: string}) {
+        const lockId = savedMeltResp.lockId;
+        const savedMelt = savedMeltResp.obj;
+        const actionId = savedMelt.getId();
+        try {
+            await this.pay(savedMeltResp);
+            savedMelt.setState(SavedTokenMeltState.PAYING)
+            await this.storage.saveAndUnlock(savedMelt, lockId);
+        } catch (e) {
+            await this.secretStorage.unlockBatch(savedMelt.inputs, actionId);
+            savedMelt.inputs = null;
+            savedMelt.setState(SavedTokenMeltState.INIT);
+            await this.storage.saveAndUnlock(savedMelt, lockId);
+            throw e;
+        }
+    }
+
+    private async subscribeToPaymentAndFinish(savedMelt: T): Promise<Res> {
+        const actionId = savedMelt.getId();
+        //If this fails we don't actually know if the payment succeeded or not, we should retry in that case
+        let resp: Res = await this.waitForPayment(savedMelt);
+
+        if(resp.paid) {
+            await this.secretStorage.addBatch(savedMelt.inputs, actionId);
+        } else {
+            await this.secretStorage.unlockBatch(savedMelt.inputs, actionId);
+        }
+
+        await this.storage.remove(actionId);
+
+        return resp;
+    }
+
     protected async _melt(request: Req, savedMeltResp: {obj: T, lockId: string}): Promise<Res> {
         const actionId = request.quote;
 
@@ -92,8 +118,12 @@ export abstract class TokenMelt<
 
         //3. Check quote state
         const savedMelt = savedMeltResp.obj;
+        if(savedMelt.expiry<Math.floor(Date.now()/1000)) {
+            await this.storage.unlock(actionId, lockId);
+            throw new NutError(NutErrorType.QUOTE_EXPIRED, "Quote expired");
+        }
         if(savedMelt.getState()!=SavedTokenMeltState.INIT) {
-            await this.meltStorage.unlock(actionId, lockId);
+            await this.storage.unlock(actionId, lockId);
             throw new NutError(NutErrorType.QUOTE_INPUTS_SET, "Quote inputs are already set");
         }
 
@@ -102,62 +132,41 @@ export abstract class TokenMelt<
 
         //5. Check the amounts
         if(!this.hasCorrectMeltAmount(savedMelt.amount, savedMelt.feeReserve, savedMelt.unit, sortedInputs)) {
-            await this.meltStorage.unlock(actionId, lockId);
+            await this.storage.unlock(actionId, lockId);
             throw new NutError(NutErrorType.INSUFFICIENT_INPUTS, "Not enough inputs");
         }
 
         //6. Check if input proofs are valid
         if(!this.verifyInputProofs(sortedInputs)) {
-            await this.meltStorage.unlock(actionId, lockId);
+            await this.storage.unlock(actionId, lockId);
             throw new NutError(NutErrorType.PROOF_VERIFY_FAIL, "Input proof verification failed");
         }
 
         //7. Check if inputs are already spent
         savedMelt.inputs = request.inputs;
         savedMelt.setState(SavedTokenMeltState.LOCKING_INPUTS);
-        await this.meltStorage.save(savedMelt);
+        await this.storage.save(savedMelt);
 
         if(await this.secretStorage.hasAnyOfBatchAndLock(request.inputs, actionId)) {
             savedMelt.inputs = null;
             savedMelt.setState(SavedTokenMeltState.INIT);
-            await this.meltStorage.saveAndUnlock(savedMelt, lockId);
+            await this.storage.saveAndUnlock(savedMelt, lockId);
             throw new NutError(NutErrorType.SECRET_ALREADY_SPENT, "Input secret already spent");
         }
 
         savedMelt.setState(SavedTokenMeltState.INPUTS_LOCKED);
-        await this.meltStorage.save(savedMelt);
+        await this.storage.save(savedMelt);
 
         //8. Initiate payment
-        try {
-            await this.pay(savedMeltResp);
-            savedMelt.setState(SavedTokenMeltState.PAYING)
-            await this.meltStorage.saveAndUnlock(savedMelt, lockId);
-        } catch (e) {
-            await this.secretStorage.unlockBatch(request.inputs, actionId);
-            savedMelt.inputs = null;
-            savedMelt.setState(SavedTokenMeltState.INIT);
-            await this.meltStorage.saveAndUnlock(savedMelt, lockId);
-            throw e;
-        }
+        await this.intiatePayment(savedMeltResp);
 
         //9. Wait for payment result
-        //If this fails we don't actually know if the payment succeeded or not, we should retry in that case
-        let resp: Res = await this.waitForPayment(savedMelt);
-
-        if(resp.paid) {
-            await this.secretStorage.addBatch(request.inputs, actionId);
-        } else {
-            await this.secretStorage.unlockBatch(request.inputs, actionId);
-        }
-
-        await this.meltStorage.remove(actionId);
-
-        return resp;
+        return await this.subscribeToPaymentAndFinish(savedMelt);
     }
 
     async melt(request: Req): Promise<Res> {
         const actionId = request.quote;
-        const savedMintResp: {obj: T, lockId: string} = await this.meltStorage.getAndLock(actionId, 60);
+        const savedMintResp: {obj: T, lockId: string} = await this.storage.getAndLock(actionId, 60);
         return await this._melt(request, savedMintResp);
     }
 

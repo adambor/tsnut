@@ -58,8 +58,4 @@ export class Keyset<S extends IScalar<P>, P extends IPoint<S>> extends NUT01Keys
         return this.smallestDenomination;
     }
 
-    // getFee(numInputs: number): number {
-    //     return Math.ceil(Math.round(numInputs*this.inputFeePpk)/Math.round(1000*this.smallestDenomination)) * this.smallestDenomination;
-    // }
-
 }

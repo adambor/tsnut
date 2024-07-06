@@ -21,12 +21,13 @@ export class Bolt11TokenMint extends TokenMint<
     constructor(
         keysets: Keyset<any, any>[],
         secretStorage: ISecretStorage,
-        swapStorage: ILockableObjectStorage<SavedBolt11TokenMint>,
-        unitConverter: IUnitConverter,
+        storage: ILockableObjectStorage<SavedBolt11TokenMint>,
         lightningBackend: ILightningBackend,
-        allowedUnits?: Set<string>
+        quoteExpirySeconds: number,
+        unitConverter: IUnitConverter,
+        unitLimits?: {[unit: string]: {min: number, max: number}}
     ) {
-        super(keysets, secretStorage, swapStorage, unitConverter, allowedUnits);
+        super(keysets, secretStorage, storage, quoteExpirySeconds, unitConverter, unitLimits);
         this.lightningBackend = lightningBackend;
     }
 
@@ -36,10 +37,10 @@ export class Bolt11TokenMint extends TokenMint<
 
     async mintQuote(request: MintQuoteBolt11Request): Promise<MintQuoteBolt11Response> {
         const invoiceAmount = await this.unitConverter.convert(request.amount, request.unit, this.lightningBackend.getUnit());
-        const invoice = await this.lightningBackend.createInvoice(invoiceAmount);
+        const invoice = await this.lightningBackend.createInvoice(invoiceAmount, this.quoteExpirySeconds);
 
         const savedMint = new SavedBolt11TokenMint(invoice.pr, request.amount, request.unit);
-        await this.mintStorage.save(savedMint);
+        await this.storage.save(savedMint);
 
         return {
             quote: savedMint.getId(),
@@ -50,7 +51,7 @@ export class Bolt11TokenMint extends TokenMint<
     }
 
     async getQuote(quote: string): Promise<MintQuoteBolt11Response> {
-        const savedMint = await this.mintStorage.get(quote);
+        const savedMint = await this.storage.get(quote);
         if(savedMint==null) throw new NutError(NutErrorType.QUOTE_NOT_FOUND, "Quote not found");
 
         const parsedInvoice = this.lightningBackend.parseInvoice(savedMint.pr);
@@ -72,7 +73,7 @@ export class Bolt11TokenMint extends TokenMint<
 
     async mint(request: MintRequest): Promise<MintResponse> {
         const actionId = request.quote;
-        const savedMintResp = await this.mintStorage.getAndLock(actionId, 60);
+        const savedMintResp = await this.storage.getAndLock(actionId, 60);
         if(savedMintResp==null) throw new NutError(NutErrorType.QUOTE_NOT_FOUND, "Quote not found");
 
         const savedMint = savedMintResp.obj;
@@ -86,6 +87,23 @@ export class Bolt11TokenMint extends TokenMint<
         }
 
         return await this._mint(request, savedMintResp);
+    }
+
+    getSupportedNuts(): { "4": any } {
+        return {
+            "4": {
+                methods: Object.keys(this.unitLimits).map(unit => {
+                    const limits = this.unitLimits[unit];
+                    return {
+                        method: "bolt11",
+                        unit,
+                        min_amount: limits.min,
+                        max_amount: limits.max
+                    }
+                }),
+                disabled: this.allowedUnits.size===0
+            }
+        };
     }
 
 }

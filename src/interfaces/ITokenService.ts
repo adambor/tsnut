@@ -70,4 +70,6 @@ export abstract class ITokenService {
         return blindSignatures;
     }
 
+    abstract getSupportedNuts(): {[nutId: string]: any};
+
 }

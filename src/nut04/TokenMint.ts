@@ -1,53 +1,25 @@
-import {IObjectStorage} from "../interfaces/storage/IObjectStorage";
-import {Keyset} from "../nut02/Keyset";
 import {SavedTokenMint} from "./persistent/SavedTokenMint";
-import {ITokenService} from "../interfaces/ITokenService";
 import {BlindedMessage} from "../nut00/types/BlindedMessage";
 import {NutError, NutErrorType} from "../nut00/types/NutError";
 import {MintQuoteRequest} from "./types/MintQuoteRequest";
 import {MintQuoteResponse} from "./types/MintQuoteResponse";
 import {isMintRequest, MintRequest} from "./types/MintRequest";
 import {MintResponse} from "./types/MintResponse";
-import {ILockableObjectStorage} from "../interfaces/storage/ILockableObjectStorage";
-import {IUnitConverter} from "../interfaces/units/IUnitConverter";
+import {IMintMeltTokenService} from "../interfaces/IMintMeltTokenService";
 
 export abstract class TokenMint<
     T extends SavedTokenMint,
     ReqQuote extends MintQuoteRequest,
     ResQuote extends MintQuoteResponse
-> extends ITokenService {
-
-    mintStorage: ILockableObjectStorage<T>;
-    unitConverter: IUnitConverter;
-    allowedUnits: Set<string>;
-
-    constructor(
-        keysets: Keyset<any, any>[],
-        secretStorage: ISecretStorage,
-        mintStorage: ILockableObjectStorage<T>,
-        unitConverter: IUnitConverter,
-        allowedUnits?: Set<string>
-    ) {
-        super(keysets, secretStorage);
-        this.mintStorage = mintStorage;
-        this.unitConverter = unitConverter;
-        if(allowedUnits==null) {
-            this.allowedUnits = new Set();
-            keysets.forEach(keyset => {
-                if(keyset.active) this.allowedUnits.add(keyset.unit);
-            });
-        } else {
-            this.allowedUnits = allowedUnits;
-        }
-    }
+> extends IMintMeltTokenService<T> {
 
     async start(): Promise<void> {
-        const savedMints = await this.mintStorage.getAll();
+        const savedMints = await this.storage.getAll();
         for(let savedMint of savedMints) {
             if(savedMint.outputs!=null) {
                 const sortedOutputs = this.sortOutputsByKeysetId(savedMint.outputs);
                 const signatures = await this.signBlindedMessages(sortedOutputs);
-                await this.mintStorage.remove(savedMint.getId());
+                await this.storage.remove(savedMint.getId());
             }
         }
     }
@@ -99,13 +71,13 @@ export abstract class TokenMint<
         //3. Check if mint quote is paid
         const savedMint = savedMintResp.obj;
         if(!savedMint.paid) {
-            await this.mintStorage.unlock(actionId, lockId);
+            await this.storage.unlock(actionId, lockId);
             throw new NutError(NutErrorType.QUOTE_NOT_PAID, "Quote not paid yet!");
         }
 
         //4. Check if quote already has outputs set
         if(savedMint.outputs!=null) {
-            await this.mintStorage.unlock(actionId, lockId);
+            await this.storage.unlock(actionId, lockId);
             throw new NutError(NutErrorType.QUOTE_ALREADY_CLAIMED, "Quote already claimed");
         }
 
@@ -116,19 +88,19 @@ export abstract class TokenMint<
         try {
             this.checkAmountAndKeysets(savedMint.amount, savedMint.unit, sortedOutputs);
         } catch (e) {
-            await this.mintStorage.unlock(actionId, lockId);
+            await this.storage.unlock(actionId, lockId);
             throw e;
         }
 
         //7. Save outputs
         savedMint.outputs = request.outputs;
-        await this.mintStorage.saveAndUnlock(savedMint, lockId);
+        await this.storage.saveAndUnlock(savedMint, lockId);
 
         //8. Sign outputs
         const signatures = await this.signBlindedMessages(sortedOutputs);
 
         //9. Remove from mint storage
-        await this.mintStorage.remove(actionId);
+        await this.storage.remove(actionId);
 
         return {
             signatures
@@ -137,7 +109,7 @@ export abstract class TokenMint<
 
     async mint(request: MintRequest): Promise<MintResponse> {
         const actionId = request.quote;
-        const savedMintResp: {obj: T, lockId: string} = await this.mintStorage.getAndLock(actionId, 60);
+        const savedMintResp: {obj: T, lockId: string} = await this.storage.getAndLock(actionId, 60);
         return await this._mint(request, savedMintResp);
     }
 

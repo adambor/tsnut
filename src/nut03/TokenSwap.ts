@@ -132,4 +132,8 @@ class TokenSwap extends ITokenService {
         };
     }
 
+    getSupportedNuts(): { [p: string]: any } {
+        return {};
+    }
+
 }
