@@ -6,7 +6,7 @@ import {BlindedMessage} from "../nut00/types/BlindedMessage";
 import {NutError, NutErrorType} from "../nut00/types/NutError";
 import {MintQuoteRequest} from "./types/MintQuoteRequest";
 import {MintQuoteResponse} from "./types/MintQuoteResponse";
-import {MintRequest} from "./types/MintRequest";
+import {isMintRequest, MintRequest} from "./types/MintRequest";
 import {MintResponse} from "./types/MintResponse";
 import {ILockableObjectStorage} from "../interfaces/storage/ILockableObjectStorage";
 import {IUnitConverter} from "../interfaces/units/IUnitConverter";
@@ -19,16 +19,37 @@ export abstract class TokenMint<
 
     mintStorage: ILockableObjectStorage<T>;
     unitConverter: IUnitConverter;
+    allowedUnits: Set<string>;
 
     constructor(
         keysets: Keyset<any, any>[],
         secretStorage: ISecretStorage,
         mintStorage: ILockableObjectStorage<T>,
-        unitConverter: IUnitConverter
+        unitConverter: IUnitConverter,
+        allowedUnits?: Set<string>
     ) {
         super(keysets, secretStorage);
         this.mintStorage = mintStorage;
         this.unitConverter = unitConverter;
+        if(allowedUnits==null) {
+            this.allowedUnits = new Set();
+            keysets.forEach(keyset => {
+                if(keyset.active) this.allowedUnits.add(keyset.unit);
+            });
+        } else {
+            this.allowedUnits = allowedUnits;
+        }
+    }
+
+    async start(): Promise<void> {
+        const savedMints = await this.mintStorage.getAll();
+        for(let savedMint of savedMints) {
+            if(savedMint.outputs!=null) {
+                const sortedOutputs = this.sortOutputsByKeysetId(savedMint.outputs);
+                const signatures = await this.signBlindedMessages(sortedOutputs);
+                await this.mintStorage.remove(savedMint.getId());
+            }
+        }
     }
 
     private hasCorrectMintAmount(amount: number, unit: string, outputs: {[keysetId: string]: {index: number, msg: BlindedMessage}[]}) {
@@ -52,6 +73,13 @@ export abstract class TokenMint<
         //2. Check if outputs use active keysets
         if(!this.hasOnlyActiveKeysets(sortedOutputs))
             throw new NutError(NutErrorType.INACTIVE_OUTPUT_KEYSET, "Output uses inactive keyset");
+    }
+
+
+    abstract checkMintQuoteRequest(req: ReqQuote): boolean;
+
+    checkMintRequest(req: MintRequest): boolean {
+        return isMintRequest(req, this.keysetFields);
     }
 
     abstract mintQuote(request: ReqQuote): Promise<ResQuote>;

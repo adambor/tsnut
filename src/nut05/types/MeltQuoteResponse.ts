@@ -4,7 +4,7 @@ export type MeltQuoteResponse = {
     quote: string,
     amount: number,
     fee_reserve: number,
-    paid: number,
+    paid: boolean,
     expiry: number
 };
 

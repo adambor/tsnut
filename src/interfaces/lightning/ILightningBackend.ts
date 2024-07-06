@@ -20,9 +20,18 @@ export interface ILightningBackend {
     createInvoice(amount: number): Promise<{pr: string, id: string, expiry: number}>;
     getInvoiceStatus(id: string): Promise<LightningInvoiceStatus>;
 
+    isValidBolt11Request(pr: string): boolean;
     parseInvoice(pr: string): {id: string, amount: number, expiry: number};
 
+    estimatePaymentFee(pr: string): Promise<number>;
     payInvoice(pr: string): Promise<void>;
     getPaymentStatus(id: string): Promise<LightningPaymentStatus>;
+
+    /**
+     * Waits for a lightning payment to either succeed or fail
+     * Returns a payment pre-image if success or null if failed
+     * @param id
+     */
+    waitForPayment(id: string): Promise<string>;
 
 }

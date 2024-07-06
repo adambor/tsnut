@@ -5,7 +5,6 @@ export type MintQuoteBolt11Response = MintQuoteResponse & {
 };
 
 export function isMintQuoteBolt11Response(msg: any): msg is MintQuoteBolt11Response {
-    if(!isMintQuoteResponse(msg)) return false;
     if(msg.request==null) return false;
-    return true;
+    return isMintQuoteResponse(msg);
 }

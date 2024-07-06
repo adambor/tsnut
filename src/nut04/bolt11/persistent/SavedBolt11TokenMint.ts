@@ -1,21 +1,14 @@
 import {SavedTokenMint} from "../../persistent/SavedTokenMint";
 import {BlindedMessage} from "../../../nut00/types/BlindedMessage";
-import {randomBytes} from "crypto";
 
 
 export class SavedBolt11TokenMint extends SavedTokenMint {
 
-    id: string;
     pr: string;
 
     constructor(pr: string, amount: number, unit: string, id?: string, paid?: boolean, outputs?: BlindedMessage[]) {
-        super(amount, unit, paid, outputs);
+        super(amount, unit, id, paid, outputs);
         this.pr = pr;
-        this.id = id || randomBytes(32).toString("hex");
-    }
-
-    getId(): string {
-        return this.id;
     }
 
     serialize(): Buffer {

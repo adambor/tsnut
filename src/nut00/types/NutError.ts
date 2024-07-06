@@ -5,10 +5,15 @@ export const NutErrorType = {
     INACTIVE_OUTPUT_KEYSET: 2,
     INSUFFICIENT_INPUTS: 3,
     INVALID_TOTAL_OUTPUT: 4,
+
     QUOTE_NOT_FOUND: 5,
+
     QUOTE_NOT_PAID: 6,
     QUOTE_ALREADY_CLAIMED: 7,
-    QUOTE_ALREADY_CLAIMING: 8
+    QUOTE_ALREADY_CLAIMING: 8,
+
+    QUOTE_ADDING_INPUTS: 9,
+    QUOTE_INPUTS_SET: 10
 };
 
 export class NutError extends Error {

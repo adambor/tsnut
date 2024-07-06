@@ -1,7 +1,7 @@
 import {Keyset} from "../../nut02/Keyset";
 import {TokenMint} from "../TokenMint";
 import {SavedBolt11TokenMint} from "./persistent/SavedBolt11TokenMint";
-import {MintQuoteBolt11Request} from "./types/MintQuoteBolt11Request";
+import {isMintQuoteBolt11Request, MintQuoteBolt11Request} from "./types/MintQuoteBolt11Request";
 import {MintQuoteBolt11Response} from "./types/MintQuoteBolt11Response";
 import {ILockableObjectStorage} from "../../interfaces/storage/ILockableObjectStorage";
 import {ILightningBackend, LightningInvoiceStatus} from "../../interfaces/lightning/ILightningBackend";
@@ -23,10 +23,15 @@ export class Bolt11TokenMint extends TokenMint<
         secretStorage: ISecretStorage,
         swapStorage: ILockableObjectStorage<SavedBolt11TokenMint>,
         unitConverter: IUnitConverter,
-        lightningBackend: ILightningBackend
+        lightningBackend: ILightningBackend,
+        allowedUnits?: Set<string>
     ) {
-        super(keysets, secretStorage, swapStorage, unitConverter);
+        super(keysets, secretStorage, swapStorage, unitConverter, allowedUnits);
         this.lightningBackend = lightningBackend;
+    }
+
+    checkMintQuoteRequest(req: MintQuoteBolt11Request): boolean {
+        return isMintQuoteBolt11Request(req, this.allowedUnits);
     }
 
     async mintQuote(request: MintQuoteBolt11Request): Promise<MintQuoteBolt11Response> {
@@ -37,7 +42,7 @@ export class Bolt11TokenMint extends TokenMint<
         await this.mintStorage.save(savedMint);
 
         return {
-            quote: savedMint.id,
+            quote: savedMint.getId(),
             request: invoice.pr,
             expiry: invoice.expiry,
             paid: false
@@ -58,7 +63,7 @@ export class Bolt11TokenMint extends TokenMint<
         }
 
         return {
-            quote: savedMint.id,
+            quote: savedMint.getId(),
             request: savedMint.pr,
             expiry: parsedInvoice.expiry,
             paid: savedMint.paid
