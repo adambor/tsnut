@@ -1,11 +1,15 @@
-import {IPoint} from "./IPoint";
+import { IHexSerializable } from "../serialization/IHexSerializable";
 import {IField} from "./IField";
+import {IPoint} from "./IPoint";
 
 
-export interface IScalar<P extends IPoint<this>> extends IHexSerializable {
+export interface IScalar<F extends IField<IScalar<F>, IPoint<F>>> extends IHexSerializable {
 
-    getField(): IField<this, P>;
+    getField(): F;
 
-    sign(point: P): P;
+    sign(point: IPoint<F>): IPoint<F>;
+    toPoint(): IPoint<F>;
+
+    isMember(): boolean;
 
 }

@@ -1,4 +1,4 @@
 
-interface IHexSerializable {
+export interface IHexSerializable {
     toHex(): string;
 }

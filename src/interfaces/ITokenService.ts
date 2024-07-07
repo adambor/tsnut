@@ -11,14 +11,14 @@ import {NutError, NutErrorType} from "../nut00/types/NutError";
 export abstract class ITokenService {
 
     keysets: {
-        [id: string]: Keyset<any, any>
+        [id: string]: Keyset<any>
     } = {};
     keysetFields: {
         [id: string]: IField<any, any>
     } = {};
     secretStorage: ISecretStorage;
 
-    constructor(keysets: Keyset<any, any>[], secretStorage: ISecretStorage) {
+    constructor(keysets: Keyset<any>[], secretStorage: ISecretStorage) {
         this.secretStorage = secretStorage;
         keysets.forEach(keyset => {
             this.keysets[keyset.getId()] = keyset;

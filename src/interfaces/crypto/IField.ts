@@ -1,9 +1,8 @@
 import {IScalar} from "./IScalar";
 import {IPoint} from "./IPoint";
 
-export interface IField<S extends IScalar<P>, P extends IPoint<S>> {
+export interface IField<S extends IScalar<IField<S, P>>, P extends IPoint<IField<S, P>>> {
 
-    generator(): P;
     hashToField(bytes: Buffer): P;
 
     hexToScalar(hexString: string): S;

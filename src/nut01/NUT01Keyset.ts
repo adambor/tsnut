@@ -7,20 +7,20 @@ import {BlindedMessage} from "../nut00/types/BlindedMessage";
 import {BlindSignature} from "../nut00/types/BlindSignature";
 import {IField} from "../interfaces/crypto/IField";
 
-export class NUT01Keyset<S extends IScalar<P>, P extends IPoint<S>> {
+export class NUT01Keyset<F extends IField<any, any>> {
 
-    private field: IField<S, P>;
+    private field: F;
 
     id: string;
     unit: string;
     keys: {
-        [amount: number]: BDHKEKey<S,P>;
+        [amount: number]: BDHKEKey<F>;
     };
 
     bakedResponse: KeysetResponse;
 
     constructor(id: string, unit: string, keys: {
-        [amount: number]: BDHKEKey<S,P>;
+        [amount: number]: BDHKEKey<F>;
     }) {
         this.id = id;
         this.unit = unit;
@@ -72,7 +72,7 @@ export class NUT01Keyset<S extends IScalar<P>, P extends IPoint<S>> {
         return this.unit;
     }
 
-    getField(): IField<S, P> {
+    getField(): F {
         return this.field;
     }
 

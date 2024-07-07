@@ -4,10 +4,11 @@ import {IPoint} from "../interfaces/crypto/IPoint";
 import {BDHKEKey} from "../nut00/BDHKE";
 import {isInteger} from "../utils/NumberUtils";
 import {createHash} from "crypto";
+import {IField} from "../interfaces/crypto/IField";
 
 const version = 0x00;
 
-export class Keyset<S extends IScalar<P>, P extends IPoint<S>> extends NUT01Keyset<S, P> {
+export class Keyset<F extends IField<any, any>> extends NUT01Keyset<F> {
 
     active: boolean;
     inputFeePpk: number;
@@ -17,7 +18,7 @@ export class Keyset<S extends IScalar<P>, P extends IPoint<S>> extends NUT01Keys
     constructor(
         unit: string,
         keys: {
-            [amount: number]: BDHKEKey<S,P>;
+            [amount: number]: BDHKEKey<F>;
         },
         active: boolean,
         inputFeePpk: number

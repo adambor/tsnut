@@ -14,7 +14,7 @@ export abstract class IMintMeltTokenService<T extends IBinarySerializable> exten
     quoteExpirySeconds: number;
 
     constructor(
-        keysets: Keyset<any, any>[],
+        keysets: Keyset<any>[],
         secretStorage: ISecretStorage,
         storage: ILockableObjectStorage<T>,
         quoteExpirySeconds: number,

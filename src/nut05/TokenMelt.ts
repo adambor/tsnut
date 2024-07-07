@@ -97,8 +97,10 @@ export abstract class TokenMelt<
 
         if(resp.paid) {
             await this.secretStorage.addBatch(savedMelt.inputs, actionId);
+            savedMelt.setState(SavedTokenMeltState.SUCCESS);
         } else {
             await this.secretStorage.unlockBatch(savedMelt.inputs, actionId);
+            savedMelt.setState(SavedTokenMeltState.FAIL);
         }
 
         await this.storage.remove(actionId);

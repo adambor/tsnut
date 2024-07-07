@@ -14,7 +14,7 @@ class TokenSwap extends ITokenService {
 
     swapStorage: IObjectStorage<SavedTokenSwap>;
 
-    constructor(keysets: Keyset<any, any>[], secretStorage: ISecretStorage, swapStorage: IObjectStorage<SavedTokenSwap>) {
+    constructor(keysets: Keyset<any>[], secretStorage: ISecretStorage, swapStorage: IObjectStorage<SavedTokenSwap>) {
         super(keysets, secretStorage);
         this.swapStorage = swapStorage;
     }

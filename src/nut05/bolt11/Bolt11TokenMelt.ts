@@ -22,7 +22,7 @@ export class Bolt11TokenMelt extends TokenMelt<
     lightningBackend: ILightningBackend;
 
     constructor(
-        keysets: Keyset<any, any>[],
+        keysets: Keyset<any>[],
         secretStorage: ISecretStorage,
         meltStorage: ILockableObjectStorage<SavedBolt11TokenMelt>,
         lightningBackend: ILightningBackend,

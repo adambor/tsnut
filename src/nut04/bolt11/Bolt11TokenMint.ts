@@ -19,7 +19,7 @@ export class Bolt11TokenMint extends TokenMint<
     lightningBackend: ILightningBackend;
 
     constructor(
-        keysets: Keyset<any, any>[],
+        keysets: Keyset<any>[],
         secretStorage: ISecretStorage,
         storage: ILockableObjectStorage<SavedBolt11TokenMint>,
         lightningBackend: ILightningBackend,

@@ -1,16 +1,16 @@
 import {BlindedMessage} from "./types/BlindedMessage";
 import {BlindSignature} from "./types/BlindSignature";
 import {Proof} from "./types/Proof";
-import {IScalar} from "../interfaces/crypto/IScalar";
 import {IField} from "../interfaces/crypto/IField";
 import {IPoint} from "../interfaces/crypto/IPoint";
+import {IScalar} from "../interfaces/crypto/IScalar";
 
-export class BDHKEKey<S extends IScalar<P>, P extends IPoint<S>> {
+export class BDHKEKey<F extends IField<IScalar<F>, IPoint<F>>> {
 
-    private field: IField<S, P>;
-    private key: S;
+    private field: F;
+    private key: IScalar<F>;
 
-    constructor(key: S) {
+    constructor(key: IScalar<F>) {
         this.field = key.getField();
         this.key = key;
     }
@@ -33,11 +33,11 @@ export class BDHKEKey<S extends IScalar<P>, P extends IPoint<S>> {
         return this.key.sign(this.field.hashToField(x)).equals(C);
     }
 
-    getPublicKey(): P {
-        return this.field.generator().mul(this.key);
+    getPublicKey(): IPoint<F> {
+        return this.key.toPoint();
     }
 
-    getField(): IField<S, P> {
+    getField(): F {
         return this.field;
     }
 
