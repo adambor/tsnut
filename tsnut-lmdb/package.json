@@ -1,0 +1,17 @@
+{
+  "name": "tsnut-lmdb",
+  "version": "1.0.0",
+  "description": "",
+  "main": "dist/index.js",
+  "types:": "dist/index.d.ts",
+  "scripts": {
+    "start": "node dist/index.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@types/node": "^20.14.9",
+    "lmdb": "^3.0.12",
+    "tsnut": "file:../tsnut"
+  }
+}
